@@ -1,0 +1,21 @@
+[Unit]
+Description=Listener Censo Monitoreo - Procesador
+After=network.target mariadb.service
+
+[Service]
+User=root
+WorkingDirectory=/opt/listener-censo-monitoreo
+ExecStart=/usr/bin/java -Xms2g -Xmx6g -jar listener-censo-monitoreo-1.0-SNAPSHOT.jar
+
+Restart=always
+RestartSec=5
+StartLimitBurst=3
+StartLimitIntervalSec=30
+
+StandardOutput=append:/var/log/listener-censo-monitoreo/procesador.out.log
+StandardError=append:/var/log/listener-censo-monitoreo/procesador.err.log
+
+KillMode=process
+
+[Install]
+WantedBy=multi-user.target
