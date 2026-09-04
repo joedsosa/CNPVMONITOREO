@@ -8,6 +8,7 @@ public class CalidadFecFecundidad {
     private int zona;
     private int sector;
     private String segmento;
+    private String censista;
     private int cantMujeres15_49Anios;
     private int cantMujer15ConHijos;
     private int cantHijosNacidos15_49;
@@ -37,7 +38,7 @@ public class CalidadFecFecundidad {
     private int hijos45_49;
 
     public CalidadFecFecundidad(String depto, String muni, int apoyoMunicipal, int zona, int sector,
-            String segmento, int cantMujeres15_49Anios, int cantMujer15ConHijos,
+            String segmento, String censista, int cantMujeres15_49Anios, int cantMujer15ConHijos,
         int cantHijosNacidos15_49, int cantHijosNacidos, int edad15_19,
             int edad20_24, int edad25_29, int edad30_34, int edad35_39,
             int edad40_44, int edad45_49, int primerHijo15_19, int primerHijo20_24,
@@ -51,6 +52,7 @@ public class CalidadFecFecundidad {
         this.zona = zona;
         this.sector = sector;
         this.segmento = segmento;
+        this.censista = censista;
         this.cantMujeres15_49Anios = cantMujeres15_49Anios;
         this.cantMujer15ConHijos = cantMujer15ConHijos;
         this.cantHijosNacidos15_49 = cantHijosNacidos15_49;
@@ -86,6 +88,7 @@ public class CalidadFecFecundidad {
     public int getZona() { return zona; }
     public int getSector() { return sector; }
     public String getSegmento() { return segmento; }
+    public String getCensista() { return censista; }
     public int getCantMujeres15_49Anios() { return cantMujeres15_49Anios; }
     public int getCantMujer15ConHijos() { return cantMujer15ConHijos; }
     public int getCantHijosNacidos15_49() { return cantHijosNacidos15_49; }

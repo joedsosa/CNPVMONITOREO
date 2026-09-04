@@ -6,6 +6,8 @@ public class CobEvolucionCobertura {
 
     private String depto;
     private String muni;
+    private int apoyoMunicipal;
+    private int zona;
     private String sector;
     private String segmento;
     private String censista;
@@ -14,10 +16,12 @@ public class CobEvolucionCobertura {
     private int vivOcupadasDia;
     private Date fecha;
 
-    public CobEvolucionCobertura(String depto, String muni, String sector, String segmento, String censista,
+    public CobEvolucionCobertura(String depto, String muni, int apoyoMunicipal, int zona, String sector, String segmento, String censista,
                                   int avanceDia, int vivOcupadasDia, Date fecha) {
         this.depto = depto;
         this.muni = muni;
+        this.apoyoMunicipal = apoyoMunicipal;
+        this.zona = zona;
         this.sector = sector;
         this.segmento = segmento;
         this.censista = censista;
@@ -32,6 +36,14 @@ public class CobEvolucionCobertura {
 
     public String getMuni() {
         return muni;
+    }
+
+    public int getApoyoMunicipal() {
+        return apoyoMunicipal;
+    }
+
+    public int getZona() {
+        return zona;
     }
 
     public String getSector() {

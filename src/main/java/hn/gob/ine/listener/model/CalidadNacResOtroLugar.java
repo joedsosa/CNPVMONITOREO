@@ -18,11 +18,14 @@ public class CalidadNacResOtroLugar {
     private int cantNacOtroPaisM;
     private int cantNac5aniosH;
     private int cantNac5aniosM;
+    private int cantidad;
+    private int cant5Mas;
 
     public CalidadNacResOtroLugar(String depto, String muni, int apoyoMunicipal, int zona, int sector,
             String segmento, String censista, int cantNacOtroMuni, int cantNacOtroPais,
             int cantNac5anios, int cantNacOtroMuniH, int cantNacOtroMuniM,
-            int cantNacOtroPaisH, int cantNacOtroPaisM, int cantNac5aniosH, int cantNac5aniosM) {
+            int cantNacOtroPaisH, int cantNacOtroPaisM, int cantNac5aniosH, int cantNac5aniosM,
+            int cantidad, int cant5Mas) {
         this.depto = depto;
         this.muni = muni;
         this.apoyoMunicipal = apoyoMunicipal;
@@ -39,6 +42,8 @@ public class CalidadNacResOtroLugar {
         this.cantNacOtroPaisM = cantNacOtroPaisM;
         this.cantNac5aniosH = cantNac5aniosH;
         this.cantNac5aniosM = cantNac5aniosM;
+        this.cantidad = cantidad;
+        this.cant5Mas = cant5Mas;
     }
 
     public String getDepto() { return depto; }
@@ -57,4 +62,6 @@ public class CalidadNacResOtroLugar {
     public int getCantNacOtroPaisM() { return cantNacOtroPaisM; }
     public int getCantNac5aniosH() { return cantNac5aniosH; }
     public int getCantNac5aniosM() { return cantNac5aniosM; }
+    public int getCantidad() { return cantidad; }
+    public int getCant5Mas() { return cant5Mas; }
 }

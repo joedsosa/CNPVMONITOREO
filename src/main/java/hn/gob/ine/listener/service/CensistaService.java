@@ -114,13 +114,13 @@ public class CensistaService {
                     TotalHogViv total = totalHolder[0];
 
                     GeVivCobViviendasCensadas vivCensadas = new GeVivCobViviendasCensadas(
-                            total.getDepto(), total.getMuni(), String.valueOf(total.getSector()),
+                            total.getDepto(), total.getMuni(), total.getApoyoMunicipal(), total.getZona(), String.valueOf(total.getSector()),
                             total.getSegmento(), total.getCensista(), total.getVivienda()
                     );
                     destinoDAO.refrescarGeVivCobViviendasCensadas(vivCensadas);
 
                     GeVivCobHogaresCensados hogCensados = new GeVivCobHogaresCensados(
-                            total.getDepto(), total.getMuni(), String.valueOf(total.getSector()),
+                            total.getDepto(), total.getMuni(), total.getApoyoMunicipal(), total.getZona(), String.valueOf(total.getSector()),
                             total.getSegmento(), total.getCensista(), total.getHogar()
                     );
                     destinoDAO.refrescarGeVivCobHogaresCensados(hogCensados);

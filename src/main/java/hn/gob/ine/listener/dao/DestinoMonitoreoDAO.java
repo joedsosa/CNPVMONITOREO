@@ -37,12 +37,15 @@ import hn.gob.ine.listener.model.CalidadTicAcceso;
 import hn.gob.ine.listener.model.CalidadTraOcuOcupacion;
 import hn.gob.ine.listener.model.CobCensistaProductividad;
 import hn.gob.ine.listener.model.CobCensistaPorVivienda;
+import hn.gob.ine.listener.model.IndicadoresControlNacional;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.util.List;
 
 public class DestinoMonitoreoDAO {
 
+    private static final Object LOCK_INDICADORES_CONTROL_NACIONAL = new Object();
     private static final Object LOCK_TOTAL_HOG_VIV = new Object();
     private static final Object LOCK_COB_CONDICION_VIVIENDA = new Object();
     private static final Object LOCK_COB_AREA = new Object();
@@ -90,12 +93,17 @@ public class DestinoMonitoreoDAO {
 
     private void borrarTotalHogViv(TotalHogViv total) throws Exception {
 
+        // OJO: la llave de borrado NO incluye zona/sector a proposito. El "ganador" de
+        // zona/sector para un censista (obtenerCensistasPorDepartamento, rn=1) puede cambiar
+        // de una corrida a otra segun sigan llegando estructuras nuevas -- si el DELETE
+        // exigiera zona/sector exactos, la fila vieja (con el zona/sector de la corrida
+        // anterior) nunca se borraria y quedarian dos filas duplicadas para el mismo
+        // censista/segmento, sumando personas de mas (bug confirmado: 3,418 combos
+        // duplicados encontrados en produccion).
         String sql
                 = "DELETE FROM censo_monitoreo.total_hog_viv "
                 + "WHERE depto = ? "
                 + "AND muni = ? "
-                + "AND zona = ? "
-                + "AND sector = ? "
                 + "AND segmento = ? "
                 + "AND censista = ?";
 
@@ -104,10 +112,8 @@ public class DestinoMonitoreoDAO {
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, total.getDepto());
             ps.setString(2, total.getMuni());
-            ps.setInt(3, total.getZona());
-            ps.setInt(4, total.getSector());
-            ps.setString(5, total.getSegmento());
-            ps.setString(6, total.getCensista());
+            ps.setString(3, total.getSegmento());
+            ps.setString(4, total.getCensista());
 
             ps.executeUpdate();
         }
@@ -173,21 +179,23 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_condicion_vivienda "
-                + "(depto, muni, sector, segmento, censista, ocupada_presentes, ocupadas_presentes, rechazadas, pendientes) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, ocupada_presentes, ocupadas_presentes, rechazadas, pendientes) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, cob.getDepto());
             ps.setString(2, cob.getMuni());
-            ps.setString(3, cob.getSector());
-            ps.setString(4, cob.getSegmento());
-            ps.setString(5, cob.getCensista());
-            ps.setInt(6, cob.getOcupadaPresentes());
-            ps.setInt(7, cob.getOcupadasPresentes());
-            ps.setInt(8, cob.getRechazadas());
-            ps.setInt(9, cob.getPendientes());
+            ps.setInt(3, cob.getApoyoMunicipal());
+            ps.setInt(4, cob.getZona());
+            ps.setString(5, cob.getSector());
+            ps.setString(6, cob.getSegmento());
+            ps.setString(7, cob.getCensista());
+            ps.setInt(8, cob.getOcupadaPresentes());
+            ps.setInt(9, cob.getOcupadasPresentes());
+            ps.setInt(10, cob.getRechazadas());
+            ps.setInt(11, cob.getPendientes());
 
             ps.executeUpdate();
         }
@@ -228,19 +236,21 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_area "
-                + "(depto, muni, sector, segmento, censista, area_urbana, area_rural) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, area_urbana, area_rural) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, cob.getDepto());
             ps.setString(2, cob.getMuni());
-            ps.setString(3, cob.getSector());
-            ps.setString(4, cob.getSegmento());
-            ps.setString(5, cob.getCensista());
-            ps.setInt(6, cob.getAreaUrbana());
-            ps.setInt(7, cob.getAreaRural());
+            ps.setInt(3, cob.getApoyoMunicipal());
+            ps.setInt(4, cob.getZona());
+            ps.setString(5, cob.getSector());
+            ps.setString(6, cob.getSegmento());
+            ps.setString(7, cob.getCensista());
+            ps.setInt(8, cob.getAreaUrbana());
+            ps.setInt(9, cob.getAreaRural());
 
             ps.executeUpdate();
         }
@@ -288,20 +298,22 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_evolucion_cobertura "
-                + "(depto, muni, sector, segmento, censista, avance_dia, viv_ocupadas_dia, fecha) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, avance_dia, viv_ocupadas_dia, fecha) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, cob.getDepto());
             ps.setString(2, cob.getMuni());
-            ps.setString(3, cob.getSector());
-            ps.setString(4, cob.getSegmento());
-            ps.setString(5, cob.getCensista());
-            ps.setInt(6, cob.getAvanceDia());
-            ps.setInt(7, cob.getVivOcupadasDia());
-            ps.setDate(8, cob.getFecha());
+            ps.setInt(3, cob.getApoyoMunicipal());
+            ps.setInt(4, cob.getZona());
+            ps.setString(5, cob.getSector());
+            ps.setString(6, cob.getSegmento());
+            ps.setString(7, cob.getCensista());
+            ps.setInt(8, cob.getAvanceDia());
+            ps.setInt(9, cob.getVivOcupadasDia());
+            ps.setDate(10, cob.getFecha());
 
             ps.executeUpdate();
         }
@@ -343,18 +355,20 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.`ge-viv-cob-viviendas-censadas` "
-                + "(depto, mun, sector, segmento, censista, cantidad_censadas) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(depto, mun, apoyo_municipal, zona, sector, segmento, censista, cantidad_censadas) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMun());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setString(5, dato.getCensista());
-            ps.setInt(6, dato.getCantidadCensadas());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantidadCensadas());
 
             ps.executeUpdate();
         }
@@ -395,18 +409,20 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.`ge-viv-cob-hogares-censados` "
-                + "(depto, mun, sector, segmento, censista, cantidad_censadas) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(depto, mun, apoyo_municipal, zona, sector, segmento, censista, cantidad_censadas) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMun());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setString(5, dato.getCensista());
-            ps.setInt(6, dato.getCantidadCensadas());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantidadCensadas());
 
             ps.executeUpdate();
         }
@@ -447,21 +463,23 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.`ge-viv-cob-tipo-viv` "
-                + "(depto, muni, sector, segmento, censista, viv_particular, apartamento, cuarteria, otro_tipo) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, viv_particular, apartamento, cuarteria, otro_tipo) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setString(5, dato.getCensista());
-            ps.setInt(6, dato.getVivParticular());
-            ps.setInt(7, dato.getApartamento());
-            ps.setInt(8, dato.getCuarteria());
-            ps.setInt(9, dato.getOtroTipo());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getVivParticular());
+            ps.setInt(9, dato.getApartamento());
+            ps.setInt(10, dato.getCuarteria());
+            ps.setInt(11, dato.getOtroTipo());
 
             ps.executeUpdate();
         }
@@ -481,16 +499,18 @@ public class DestinoMonitoreoDAO {
                 = "DELETE FROM censo_monitoreo.cob_total_viviendas_ocupadas "
                 + "WHERE depto = ? "
                 + "AND muni = ? "
-                + "AND sector = ? "
-                + "AND segmento = ?";
+                + "AND apoyo_municipal = ? "
+                                + "AND segmento = ? "
+                + "AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
+            ps.setInt(3, dato.getApoyoMunicipal());
             ps.setString(4, dato.getSegmento());
+            ps.setString(5, dato.getCensista());
 
             ps.executeUpdate();
         }
@@ -500,18 +520,23 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_total_viviendas_ocupadas "
-                + "(depto, muni, sector, segmento, cantidad_ocupadas, cantidad) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cantidad_ocupadas, cantidad_censadas_boleta, cantidad_ocup_deso_rechazo, cantidad) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setInt(5, dato.getCantidadOcupadas());
-            ps.setInt(6, dato.getCantidad());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantidadOcupadas());
+            ps.setInt(9, dato.getCantidadCensadasBoleta());
+            ps.setInt(10, dato.getCantidadOcupDesoRechazo());
+            ps.setInt(11, dato.getCantidad());
 
             ps.executeUpdate();
         }
@@ -531,16 +556,18 @@ public class DestinoMonitoreoDAO {
                 = "DELETE FROM censo_monitoreo.cob_total_viviendas_desocupada "
                 + "WHERE depto = ? "
                 + "AND muni = ? "
-                + "AND sector = ? "
-                + "AND segmento = ?";
+                + "AND apoyo_municipal = ? "
+                                + "AND segmento = ? "
+                + "AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
+            ps.setInt(3, dato.getApoyoMunicipal());
             ps.setString(4, dato.getSegmento());
+            ps.setString(5, dato.getCensista());
 
             ps.executeUpdate();
         }
@@ -550,18 +577,21 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_total_viviendas_desocupada "
-                + "(depto, muni, sector, segmento, cantidad_desocupada, cantidad) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cantidad_desocupada, cantidad) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setInt(5, dato.getCantidadDesocupada());
-            ps.setInt(6, dato.getCantidad());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantidadDesocupada());
+            ps.setInt(9, dato.getCantidad());
 
             ps.executeUpdate();
         }
@@ -581,16 +611,18 @@ public class DestinoMonitoreoDAO {
                 = "DELETE FROM censo_monitoreo.cob_total_viviendas_ocup_ausentes "
                 + "WHERE depto = ? "
                 + "AND muni = ? "
-                + "AND sector = ? "
-                + "AND segmento = ?";
+                + "AND apoyo_municipal = ? "
+                                + "AND segmento = ? "
+                + "AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
+            ps.setInt(3, dato.getApoyoMunicipal());
             ps.setString(4, dato.getSegmento());
+            ps.setString(5, dato.getCensista());
 
             ps.executeUpdate();
         }
@@ -600,18 +632,21 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_total_viviendas_ocup_ausentes "
-                + "(depto, muni, sector, segmento, cantidad_ocupadas_ausente, cantidad) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cantidad_ocupadas_ausente, cantidad) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setInt(5, dato.getCantidadOcupadasAusente());
-            ps.setInt(6, dato.getCantidad());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantidadOcupadasAusente());
+            ps.setInt(9, dato.getCantidad());
 
             ps.executeUpdate();
         }
@@ -650,18 +685,21 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.cob_total_viviendas_particulares "
-                + "(depto, muni, sector, segmento, cantidad_particulares, cantidad) "
-                + "VALUES (?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cantidad_particulares, cantidad) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setInt(5, dato.getCantidadParticulares());
-            ps.setInt(6, dato.getCantidad());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantidadParticulares());
+            ps.setInt(9, dato.getCantidad());
 
             ps.executeUpdate();
         }
@@ -702,20 +740,22 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.`ge-viv-cob-censadas-sin` "
-                + "(depto, muni, sector, segmento, censista, agua, energia, sanitario) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, agua, energia, sanitario) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setString(3, dato.getSector());
-            ps.setString(4, dato.getSegmento());
-            ps.setString(5, dato.getCensista());
-            ps.setInt(6, dato.getAgua());
-            ps.setInt(7, dato.getEnergia());
-            ps.setInt(8, dato.getSanitario());
+            ps.setInt(3, dato.getApoyoMunicipal());
+            ps.setInt(4, dato.getZona());
+            ps.setString(5, dato.getSector());
+            ps.setString(6, dato.getSegmento());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getAgua());
+            ps.setInt(9, dato.getEnergia());
+            ps.setInt(10, dato.getSanitario());
 
             ps.executeUpdate();
         }
@@ -811,12 +851,13 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.`ge-viv-cob-munis-completados` "
-                + "WHERE muni = ?";
+                + "WHERE depto = ? AND muni = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, dato.getMuni());
+            ps.setString(1, dato.getDepto());
+            ps.setString(2, dato.getMuni());
             ps.executeUpdate();
         }
     }
@@ -825,14 +866,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.`ge-viv-cob-munis-completados` "
-                + "(muni, completado) "
-                + "VALUES (?, ?)";
+                + "(depto, muni, completado) "
+                + "VALUES (?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
-            ps.setString(1, dato.getMuni());
-            ps.setString(2, dato.getCompletado());
+            ps.setString(1, dato.getDepto());
+            ps.setString(2, dato.getMuni());
+            ps.setString(3, dato.getCompletado());
             ps.executeUpdate();
         }
     }
@@ -849,18 +891,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_viv_vivienda "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -912,18 +951,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_viv_hogar "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -967,18 +1003,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_hog_servicios "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1023,18 +1056,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_hog_nucleo "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1079,18 +1109,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_hog_hacinamiento "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1130,18 +1157,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_edu_grupo_edad "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1194,18 +1218,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_edu_nivel_educativo "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1262,18 +1283,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_disc_limitacion "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1322,18 +1340,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_etn_indigena_afro "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1380,18 +1395,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_mig_emigrante_genero "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1473,32 +1485,34 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_mig_emigrante_pais_dest "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
 
     private void insertarCalidadMigEmigrantePaisDest(CalidadMigEmigrantePaisDest dato) throws Exception {
 
+        // NOTA: pais_1, pais_2, pais_3, pais_4 y pais_otro (totales sin desglose por sexo) NO
+        // se insertan porque esas columnas no existen en la tabla destino -son redundantes con
+        // pais_eeuu_h+pais_eeuu_m, pais_espana_h+pais_espana_m, etc., que si se insertan abajo.
+        // Antes de este fix esta consulta fallaba con "Unknown column 'pais_1' in 'INSERT INTO'"
+        // en el 100% de los censistas (la tabla tenia 0 filas).
         String sql
                 = "INSERT INTO censo_monitoreo.calidad_mig_emigrante_pais_dest "
                 + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cant_mujer, cant_hombre, "
-                + "pais_1, pais_2, pais_3, pais_4, pais_otro, cantidad, "
+                + "cantidad, "
                 + "pais_eeuu_h, pais_eeuu_m, pais_espana_h, pais_espana_m, "
                 + "pais_mexico_h, pais_mexico_m, pais_canada_h, pais_canada_m, "
                 + "pais_italia_h, pais_italia_m, pais_otro_h, pais_otro_m) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
@@ -1512,24 +1526,19 @@ public class DestinoMonitoreoDAO {
             ps.setString(7, dato.getCensista());
             ps.setInt(8, dato.getCantMujer());
             ps.setInt(9, dato.getCantHombre());
-            ps.setInt(10, dato.getPais1());
-            ps.setInt(11, dato.getPais2());
-            ps.setInt(12, dato.getPais3());
-            ps.setInt(13, dato.getPais4());
-            ps.setInt(14, dato.getPaisOtro());
-            ps.setInt(15, dato.getCantidad());
-            ps.setInt(16, dato.getPaisEeuuH());
-            ps.setInt(17, dato.getPaisEeuuM());
-            ps.setInt(18, dato.getPaisEspanaH());
-            ps.setInt(19, dato.getPaisEspanaM());
-            ps.setInt(20, dato.getPaisMexicoH());
-            ps.setInt(21, dato.getPaisMexicoM());
-            ps.setInt(22, dato.getPaisCanadaH());
-            ps.setInt(23, dato.getPaisCanadaM());
-            ps.setInt(24, dato.getPaisItaliaH());
-            ps.setInt(25, dato.getPaisItaliaM());
-            ps.setInt(26, dato.getPaisOtroH());
-            ps.setInt(27, dato.getPaisOtroM());
+            ps.setInt(10, dato.getCantidad());
+            ps.setInt(11, dato.getPaisEeuuH());
+            ps.setInt(12, dato.getPaisEeuuM());
+            ps.setInt(13, dato.getPaisEspanaH());
+            ps.setInt(14, dato.getPaisEspanaM());
+            ps.setInt(15, dato.getPaisMexicoH());
+            ps.setInt(16, dato.getPaisMexicoM());
+            ps.setInt(17, dato.getPaisCanadaH());
+            ps.setInt(18, dato.getPaisCanadaM());
+            ps.setInt(19, dato.getPaisItaliaH());
+            ps.setInt(20, dato.getPaisItaliaM());
+            ps.setInt(21, dato.getPaisOtroH());
+            ps.setInt(22, dato.getPaisOtroM());
             ps.executeUpdate();
         }
     }
@@ -1546,18 +1555,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_mor_mortalidad "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1624,16 +1630,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_fec_fecundidad "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? AND segmento = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1642,14 +1647,14 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.calidad_fec_fecundidad "
-                + "(depto, muni, apoyo_municipal, zona, sector, segmento, cant_mujeres_15_49_anios, cant_mujer_15_con_hijos, "
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cant_mujeres_15_49_anios, cant_mujer_15_con_hijos, "
                 + "cant_hijos_nacidos_15_49, cant_hijos_nacidos, edad_15_19, edad_20_24, edad_25_29, "
                 + "edad_30_34, edad_35_39, edad_40_44, edad_45_49, "
                 + "`1er_hijo_15_19`, `1er_hijo_20_24`, `1er_hijo_25_29`, `1er_hijo_30_34`, "
                 + "`1er_hijo_35_39`, `1er_hijo_40_44`, `1er_hijo_45_49`, "
                 + "total_mujeres, total_mujeres_15_mas, "
                 + "hijos_15_19, hijos_20_24, hijos_25_29, hijos_30_34, hijos_35_39, hijos_40_44, hijos_45_49) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
@@ -1660,33 +1665,34 @@ public class DestinoMonitoreoDAO {
             ps.setInt(4, dato.getZona());
             ps.setInt(5, dato.getSector());
             ps.setString(6, dato.getSegmento());
-            ps.setInt(7, dato.getCantMujeres15_49Anios());
-            ps.setInt(8, dato.getCantMujer15ConHijos());
-            ps.setInt(9, dato.getCantHijosNacidos15_49());
-            ps.setInt(10, dato.getCantHijosNacidos());
-            ps.setInt(11, dato.getEdad15_19());
-            ps.setInt(12, dato.getEdad20_24());
-            ps.setInt(13, dato.getEdad25_29());
-            ps.setInt(14, dato.getEdad30_34());
-            ps.setInt(15, dato.getEdad35_39());
-            ps.setInt(16, dato.getEdad40_44());
-            ps.setInt(17, dato.getEdad45_49());
-            ps.setInt(18, dato.getPrimerHijo15_19());
-            ps.setInt(19, dato.getPrimerHijo20_24());
-            ps.setInt(20, dato.getPrimerHijo25_29());
-            ps.setInt(21, dato.getPrimerHijo30_34());
-            ps.setInt(22, dato.getPrimerHijo35_39());
-            ps.setInt(23, dato.getPrimerHijo40_44());
-            ps.setInt(24, dato.getPrimerHijo45_49());
-            ps.setInt(25, dato.getTotalMujeres());
-            ps.setInt(26, dato.getTotalMujeres15Mas());
-            ps.setInt(27, dato.getHijos15_19());
-            ps.setInt(28, dato.getHijos20_24());
-            ps.setInt(29, dato.getHijos25_29());
-            ps.setInt(30, dato.getHijos30_34());
-            ps.setInt(31, dato.getHijos35_39());
-            ps.setInt(32, dato.getHijos40_44());
-            ps.setInt(33, dato.getHijos45_49());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getCantMujeres15_49Anios());
+            ps.setInt(9, dato.getCantMujer15ConHijos());
+            ps.setInt(10, dato.getCantHijosNacidos15_49());
+            ps.setInt(11, dato.getCantHijosNacidos());
+            ps.setInt(12, dato.getEdad15_19());
+            ps.setInt(13, dato.getEdad20_24());
+            ps.setInt(14, dato.getEdad25_29());
+            ps.setInt(15, dato.getEdad30_34());
+            ps.setInt(16, dato.getEdad35_39());
+            ps.setInt(17, dato.getEdad40_44());
+            ps.setInt(18, dato.getEdad45_49());
+            ps.setInt(19, dato.getPrimerHijo15_19());
+            ps.setInt(20, dato.getPrimerHijo20_24());
+            ps.setInt(21, dato.getPrimerHijo25_29());
+            ps.setInt(22, dato.getPrimerHijo30_34());
+            ps.setInt(23, dato.getPrimerHijo35_39());
+            ps.setInt(24, dato.getPrimerHijo40_44());
+            ps.setInt(25, dato.getPrimerHijo45_49());
+            ps.setInt(26, dato.getTotalMujeres());
+            ps.setInt(27, dato.getTotalMujeres15Mas());
+            ps.setInt(28, dato.getHijos15_19());
+            ps.setInt(29, dato.getHijos20_24());
+            ps.setInt(30, dato.getHijos25_29());
+            ps.setInt(31, dato.getHijos30_34());
+            ps.setInt(32, dato.getHijos35_39());
+            ps.setInt(33, dato.getHijos40_44());
+            ps.setInt(34, dato.getHijos45_49());
             ps.executeUpdate();
         }
     }
@@ -1703,18 +1709,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_tra_ocu_ocupacion "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1774,18 +1777,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_tic_acceso "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1831,18 +1831,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_nac_res_otro_lugar "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1853,8 +1850,8 @@ public class DestinoMonitoreoDAO {
                 = "INSERT INTO censo_monitoreo.calidad_nac_res_otro_lugar "
                 + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, cant_nac_otro_muni, cant_nac_otro_pais, "
                 + "cant_nac_5anios, cant_nac_otro_muni_h, cant_nac_otro_muni_m, cant_nac_otro_pais_h, "
-                + "cant_nac_otro_pais_m, cant_nac_5anios_h, cant_nac_5anios_m) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "cant_nac_otro_pais_m, cant_nac_5anios_h, cant_nac_5anios_m, cantidad, cant_5_mas) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
@@ -1875,6 +1872,8 @@ public class DestinoMonitoreoDAO {
             ps.setInt(14, dato.getCantNacOtroPaisM());
             ps.setInt(15, dato.getCantNac5aniosH());
             ps.setInt(16, dato.getCantNac5aniosM());
+            ps.setInt(17, dato.getCantidad());
+            ps.setInt(18, dato.getCant5Mas());
             ps.executeUpdate();
         }
     }
@@ -1891,18 +1890,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_comp_hog_envejecimiento "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1953,16 +1949,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_comp_hog_piramide "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? AND segmento = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -1971,10 +1966,10 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "INSERT INTO censo_monitoreo.calidad_comp_hog_piramide "
-                + "(depto, muni, apoyo_municipal, zona, sector, segmento, edad_70_74_h, edad_70_74_m, "
+                + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, edad_70_74_h, edad_70_74_m, "
                 + "edad_75_79_h, edad_75_79_m, edad_80_84_h, edad_80_84_m, edad_85_89_h, edad_85_89_m, "
                 + "edad_90_94_h, edad_90_94_m, edad_95_99_h, edad_95_99_m, edad_100_mas_h, edad_100_mas_m) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
@@ -1985,20 +1980,21 @@ public class DestinoMonitoreoDAO {
             ps.setInt(4, dato.getZona());
             ps.setInt(5, dato.getSector());
             ps.setString(6, dato.getSegmento());
-            ps.setInt(7, dato.getEdad70_74H());
-            ps.setInt(8, dato.getEdad70_74M());
-            ps.setInt(9, dato.getEdad75_79H());
-            ps.setInt(10, dato.getEdad75_79M());
-            ps.setInt(11, dato.getEdad80_84H());
-            ps.setInt(12, dato.getEdad80_84M());
-            ps.setInt(13, dato.getEdad85_89H());
-            ps.setInt(14, dato.getEdad85_89M());
-            ps.setInt(15, dato.getEdad90_94H());
-            ps.setInt(16, dato.getEdad90_94M());
-            ps.setInt(17, dato.getEdad95_99H());
-            ps.setInt(18, dato.getEdad95_99M());
-            ps.setInt(19, dato.getEdad100MasH());
-            ps.setInt(20, dato.getEdad100MasM());
+            ps.setString(7, dato.getCensista());
+            ps.setInt(8, dato.getEdad70_74H());
+            ps.setInt(9, dato.getEdad70_74M());
+            ps.setInt(10, dato.getEdad75_79H());
+            ps.setInt(11, dato.getEdad75_79M());
+            ps.setInt(12, dato.getEdad80_84H());
+            ps.setInt(13, dato.getEdad80_84M());
+            ps.setInt(14, dato.getEdad85_89H());
+            ps.setInt(15, dato.getEdad85_89M());
+            ps.setInt(16, dato.getEdad90_94H());
+            ps.setInt(17, dato.getEdad90_94M());
+            ps.setInt(18, dato.getEdad95_99H());
+            ps.setInt(19, dato.getEdad95_99M());
+            ps.setInt(20, dato.getEdad100MasH());
+            ps.setInt(21, dato.getEdad100MasM());
             ps.executeUpdate();
         }
     }
@@ -2015,18 +2011,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.calidad_cony_estado "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -2095,32 +2088,91 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.cob_censista_productividad "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
 
     private void insertarCobCensistaProductividad(CobCensistaProductividad dato) throws Exception {
 
+        int estructurasAsignadas = 0;
+        int estructurasPendientes = 0;
+        Double pctAvance = null;
+
+        // estructuras_asignadas: viene del catalogo de segmentos (sectores_segmentos_completos),
+        // no de cnpv_data, por eso se consulta aqui contra censo_monitoreo (destino).
+        String sqlAsignaciones
+                = "SELECT cantidad_asignaciones "
+                + "FROM censo_monitoreo.sectores_segmentos_completos "
+                + "WHERE depto = ? AND muni = ? AND segmento = ? "
+                + "LIMIT 1";
+
+        try (
+                Connection con = DataSourceFactory.getDestinoConnection();
+                PreparedStatement ps = con.prepareStatement(sqlAsignaciones)) {
+            ps.setString(1, dato.getDepto());
+            ps.setString(2, dato.getMuni());
+            ps.setString(3, dato.getSegmento());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    estructurasAsignadas = rs.getInt("cantidad_asignaciones");
+                }
+            }
+        }
+
+        estructurasPendientes = Math.max(estructurasAsignadas - dato.getEstructurasTrabajadas(), 0);
+
+        // pct_avance: formula oficial del Manual del Tecnico en Monitoreo (pag. 10-11):
+        // (avance real acumulado % / avance esperado acumulado %) * 100,
+        // donde avance esperado acumulado = dias_trabajados * 2.5% (tope 100%).
+        String sqlEsperadas
+                = "SELECT SUM(cantidad_esperada) AS esperado_total "
+                + "FROM censo_monitoreo.cob_total_viviendas_esperadas "
+                + "WHERE depto = ? AND muni = ? AND segmento = ?";
+
+        try (
+                Connection con = DataSourceFactory.getDestinoConnection();
+                PreparedStatement ps = con.prepareStatement(sqlEsperadas)) {
+            ps.setString(1, dato.getDepto());
+            ps.setString(2, dato.getMuni());
+            ps.setString(3, dato.getSegmento());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    int esperadoTotal = rs.getInt("esperado_total");
+                    if (esperadoTotal > 0) {
+                        int avanceTotal = dato.getViviendasDesocupadas()
+                                + dato.getViviendasOcupAusentes()
+                                + dato.getCuestionariosEfectivos();
+                        double avancePct = avanceTotal * 100.0 / esperadoTotal;
+                        double esperadoPctHoy = Math.min(dato.getDiasTrabajados() * 2.5, 100.0);
+                        if (esperadoPctHoy > 0) {
+                            pctAvance = avancePct / esperadoPctHoy * 100.0;
+                        }
+                    }
+                }
+            }
+        }
+
+        // estado_semaforo: mismos rangos del "Tablero de alerta" del Manual del Tecnico en Monitoreo (fig. 3, pag. 10).
+        String estadoSemaforo = calcularEstadoSemaforo(pctAvance);
+
         String sql
                 = "INSERT INTO censo_monitoreo.cob_censista_productividad "
                 + "(depto, muni, apoyo_municipal, zona, sector, segmento, censista, "
-                + "estructuras_trabajadas, total_viviendas_particulares, viviendas_desocupadas, "
-                + "viviendas_ocup_ausentes, rechazos, cuestionarios_efectivos, cantidad_visitas, "
+                + "estructuras_trabajadas, estructuras_nuevas, total_viviendas_particulares, viviendas_desocupadas, "
+                + "viviendas_ocup_ausentes, rechazos, transformadas, referencias, cuestionarios_efectivos, cantidad_visitas, "
                 + "promedio_duracion_seg, max_duracion_seg, dias_trabajados, "
-                + "cantidad_hogares_unipersonales, cantidad_hogares, area) "
-                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                + "cantidad_hogares_unipersonales, cantidad_hogares_mas_3, cantidad_hogares, cantidad_personas, area, "
+                + "estructuras_asignadas, estructuras_pendientes, pct_avance, estado_semaforo) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
@@ -2133,19 +2185,53 @@ public class DestinoMonitoreoDAO {
             ps.setString(6, dato.getSegmento());
             ps.setString(7, dato.getCensista());
             ps.setInt(8, dato.getEstructurasTrabajadas());
-            ps.setInt(9, dato.getTotalViviendasParticulares());
-            ps.setInt(10, dato.getViviendasDesocupadas());
-            ps.setInt(11, dato.getViviendasOcupAusentes());
-            ps.setInt(12, dato.getRechazos());
-            ps.setInt(13, dato.getCuestionariosEfectivos());
-            ps.setInt(14, dato.getCantidadVisitas());
-            ps.setInt(15, dato.getPromedioDuracionSeg());
-            ps.setInt(16, dato.getMaxDuracionSeg());
-            ps.setInt(17, dato.getDiasTrabajados());
-            ps.setInt(18, dato.getCantidadHogaresUnipersonales());
-            ps.setInt(19, dato.getCantidadHogares());
-            ps.setInt(20, dato.getArea());
+            ps.setInt(9, dato.getEstructurasNuevas());
+            ps.setInt(10, dato.getTotalViviendasParticulares());
+            ps.setInt(11, dato.getViviendasDesocupadas());
+            ps.setInt(12, dato.getViviendasOcupAusentes());
+            ps.setInt(13, dato.getRechazos());
+            ps.setInt(14, dato.getTransformadas());
+            ps.setInt(15, dato.getReferencias());
+            ps.setInt(16, dato.getCuestionariosEfectivos());
+            ps.setInt(17, dato.getCantidadVisitas());
+            ps.setInt(18, dato.getPromedioDuracionSeg());
+            ps.setInt(19, dato.getMaxDuracionSeg());
+            ps.setInt(20, dato.getDiasTrabajados());
+            ps.setInt(21, dato.getCantidadHogaresUnipersonales());
+            ps.setInt(22, dato.getCantidadHogaresMas3());
+            ps.setInt(23, dato.getCantidadHogares());
+            ps.setInt(24, dato.getCantidadPersonas());
+            ps.setInt(25, dato.getArea());
+            ps.setInt(26, estructurasAsignadas);
+            ps.setInt(27, estructurasPendientes);
+            if (pctAvance == null) {
+                ps.setNull(28, java.sql.Types.DECIMAL);
+            } else {
+                ps.setDouble(28, pctAvance);
+            }
+            ps.setString(29, estadoSemaforo);
             ps.executeUpdate();
+        }
+    }
+
+    // Rangos del "Tablero de alerta" (Manual del Tecnico en Monitoreo, fig. 3, pag. 10).
+    // Sin parentesis, %, < ni > a proposito: esos simbolos rompen filtros WHERE estado_semaforo = '...'
+    // en reportes de la plataforma de reportes. Solo nombre + rango numerico plano.
+    private String calcularEstadoSemaforo(Double pctAvance) {
+        if (pctAvance == null || pctAvance == 0) {
+            return "Blanco 0";
+        } else if (pctAvance < 50) {
+            return "Rojo menor 50";
+        } else if (pctAvance < 85) {
+            return "Amarillo Palido 50-85";
+        } else if (pctAvance < 95) {
+            return "Amarillo 85-95";
+        } else if (pctAvance <= 105) {
+            return "Verde 95-105";
+        } else if (pctAvance <= 120) {
+            return "Azul 105-120";
+        } else {
+            return "Anaranjado mayor 120";
         }
     }
 
@@ -2161,18 +2247,15 @@ public class DestinoMonitoreoDAO {
 
         String sql
                 = "DELETE FROM censo_monitoreo.cob_censista_por_vivienda "
-                + "WHERE depto = ? AND muni = ? AND zona = ? AND sector = ? "
-                + "AND segmento = ? AND censista = ?";
+                + "WHERE depto = ? AND muni = ? AND segmento = ? AND censista = ?";
 
         try (
                 Connection con = DataSourceFactory.getDestinoConnection();
                 PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setString(1, dato.getDepto());
             ps.setString(2, dato.getMuni());
-            ps.setInt(3, dato.getZona());
-            ps.setInt(4, dato.getSector());
-            ps.setString(5, dato.getSegmento());
-            ps.setString(6, dato.getCensista());
+            ps.setString(3, dato.getSegmento());
+            ps.setString(4, dato.getCensista());
             ps.executeUpdate();
         }
     }
@@ -2204,6 +2287,60 @@ public class DestinoMonitoreoDAO {
             ps.setInt(13, dato.getViviendasTransformadas());
             ps.setInt(14, dato.getBoletasEfectivas());
             ps.setInt(15, dato.getEntrevistasRechazadas());
+            ps.executeUpdate();
+        }
+    }
+
+    // indicadores_control_nacional siempre tiene una unica fila (foto global del ultimo corte).
+    public void refrescarIndicadoresControlNacional(IndicadoresControlNacional dato) throws Exception {
+
+        synchronized (LOCK_INDICADORES_CONTROL_NACIONAL) {
+            borrarIndicadoresControlNacional();
+            insertarIndicadoresControlNacional(dato);
+        }
+    }
+
+    private void borrarIndicadoresControlNacional() throws Exception {
+
+        String sql = "DELETE FROM censo_monitoreo.indicadores_control_nacional";
+
+        try (
+                Connection con = DataSourceFactory.getDestinoConnection();
+                PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.executeUpdate();
+        }
+    }
+
+    private void insertarIndicadoresControlNacional(IndicadoresControlNacional dato) throws Exception {
+
+        String sql
+                = "INSERT INTO censo_monitoreo.indicadores_control_nacional "
+                + "(avance_estructuras_num, avance_estructuras_den, avance_estructuras_pct, "
+                + "ocupadas_presentes_num, ocupadas_presentes_den, ocupadas_presentes_pct, "
+                + "ocupadas_ausentes_num, ocupadas_ausentes_den, ocupadas_ausentes_pct, "
+                + "desocupadas_num, desocupadas_den, desocupadas_pct, "
+                + "dist_ocup_presentes, dist_ocup_ausentes, dist_rechazadas, dist_total) "
+                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        try (
+                Connection con = DataSourceFactory.getDestinoConnection();
+                PreparedStatement ps = con.prepareStatement(sql)) {
+            ps.setInt(1, dato.getAvanceEstructurasNum());
+            ps.setInt(2, dato.getAvanceEstructurasDen());
+            ps.setDouble(3, dato.getAvanceEstructurasPct());
+            ps.setInt(4, dato.getOcupadasPresentesNum());
+            ps.setInt(5, dato.getOcupadasPresentesDen());
+            ps.setDouble(6, dato.getOcupadasPresentesPct());
+            ps.setInt(7, dato.getOcupadasAusentesNum());
+            ps.setInt(8, dato.getOcupadasAusentesDen());
+            ps.setDouble(9, dato.getOcupadasAusentesPct());
+            ps.setInt(10, dato.getDesocupadasNum());
+            ps.setInt(11, dato.getDesocupadasDen());
+            ps.setDouble(12, dato.getDesocupadasPct());
+            ps.setInt(13, dato.getDistOcupPresentes());
+            ps.setInt(14, dato.getDistOcupAusentes());
+            ps.setInt(15, dato.getDistRechazadas());
+            ps.setInt(16, dato.getDistTotal());
             ps.executeUpdate();
         }
     }

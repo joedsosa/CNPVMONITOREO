@@ -16,11 +16,13 @@ hn\gob\ine\listener\service\CensistaService.class
 hn\gob\ine\listener\scheduler\SchedulerCortes$1.class
 hn\gob\ine\listener\Main.class
 hn\gob\ine\listener\model\CobTotalViviendasOcupadas.class
+hn\gob\ine\listener\EjecutarCorteManual.class
 hn\gob\ine\listener\service\CensistaService$PasoCorte.class
 hn\gob\ine\listener\dao\ControlCorteDAO.class
 hn\gob\ine\listener\model\CobCondicionVivienda.class
 hn\gob\ine\listener\model\CobEvolucionCobertura.class
 hn\gob\ine\listener\dao\OrigenCnpvDAO.class
+hn\gob\ine\listener\model\IndicadoresControlNacional.class
 hn\gob\ine\listener\model\CobCensistaPorVivienda.class
 hn\gob\ine\listener\model\CorteConfig.class
 hn\gob\ine\listener\model\CalidadNacResOtroLugar.class

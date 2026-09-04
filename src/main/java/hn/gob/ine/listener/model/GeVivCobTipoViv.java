@@ -4,6 +4,8 @@ public class GeVivCobTipoViv {
 
     private String depto;
     private String muni;
+    private int apoyoMunicipal;
+    private int zona;
     private String sector;
     private String segmento;
     private String censista;
@@ -13,10 +15,12 @@ public class GeVivCobTipoViv {
     private int cuarteria;
     private int otroTipo;
 
-    public GeVivCobTipoViv(String depto, String muni, String sector, String segmento, String censista,
+    public GeVivCobTipoViv(String depto, String muni, int apoyoMunicipal, int zona, String sector, String segmento, String censista,
                            int vivParticular, int apartamento, int cuarteria, int otroTipo) {
         this.depto = depto;
         this.muni = muni;
+        this.apoyoMunicipal = apoyoMunicipal;
+        this.zona = zona;
         this.sector = sector;
         this.segmento = segmento;
         this.censista = censista;
@@ -32,6 +36,14 @@ public class GeVivCobTipoViv {
 
     public String getMuni() {
         return muni;
+    }
+
+    public int getApoyoMunicipal() {
+        return apoyoMunicipal;
+    }
+
+    public int getZona() {
+        return zona;
     }
 
     public String getSector() {

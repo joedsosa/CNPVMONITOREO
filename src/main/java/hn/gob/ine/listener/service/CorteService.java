@@ -1,6 +1,9 @@
 package hn.gob.ine.listener.service;
 
 import hn.gob.ine.listener.dao.ControlCorteDAO;
+import hn.gob.ine.listener.dao.DestinoMonitoreoDAO;
+import hn.gob.ine.listener.dao.OrigenCnpvDAO;
+import hn.gob.ine.listener.model.IndicadoresControlNacional;
 import hn.gob.ine.listener.worker.DepartamentoWorker;
 
 import java.util.concurrent.ExecutorService;
@@ -10,9 +13,13 @@ import java.util.concurrent.TimeUnit;
 public class CorteService {
 
     private ControlCorteDAO controlDAO;
+    private OrigenCnpvDAO origenDAO;
+    private DestinoMonitoreoDAO destinoDAO;
 
     public CorteService() {
         this.controlDAO = new ControlCorteDAO();
+        this.origenDAO = new OrigenCnpvDAO();
+        this.destinoDAO = new DestinoMonitoreoDAO();
     }
 
     public void ejecutarCorte(int idConfigCorte) {
@@ -42,6 +49,19 @@ public class CorteService {
             boolean termino = executor.awaitTermination(2, TimeUnit.HOURS);
 
             if (termino) {
+                try {
+                    IndicadoresControlNacional indicadores = origenDAO.calcularIndicadoresControlNacional();
+                    destinoDAO.refrescarIndicadoresControlNacional(indicadores);
+                    System.out.println("Indicadores de control nacional actualizados -> "
+                            + "estructuras: " + indicadores.getAvanceEstructurasPct() + "%, "
+                            + "ocupadas presentes: " + indicadores.getOcupadasPresentesPct() + "%, "
+                            + "ocupadas ausentes: " + indicadores.getOcupadasAusentesPct() + "%, "
+                            + "desocupadas: " + indicadores.getDesocupadasPct() + "%");
+                } catch (Exception e) {
+                    System.err.println("Error calculando indicadores de control nacional:");
+                    e.printStackTrace();
+                }
+
                 controlDAO.finalizarEjecucion(idEjecucion, "FINALIZADO");
                 System.out.println("Corte finalizado correctamente.");
             } else {

@@ -8,6 +8,7 @@ public class CalidadCompHogPiramide {
     private int zona;
     private int sector;
     private String segmento;
+    private String censista;
     private int edad70_74H, edad70_74M;
     private int edad75_79H, edad75_79M;
     private int edad80_84H, edad80_84M;
@@ -17,7 +18,7 @@ public class CalidadCompHogPiramide {
     private int edad100MasH, edad100MasM;
 
     public CalidadCompHogPiramide(String depto, String muni, int apoyoMunicipal, int zona, int sector,
-            String segmento, int edad70_74H, int edad70_74M, int edad75_79H, int edad75_79M,
+            String segmento, String censista, int edad70_74H, int edad70_74M, int edad75_79H, int edad75_79M,
             int edad80_84H, int edad80_84M, int edad85_89H, int edad85_89M,
             int edad90_94H, int edad90_94M, int edad95_99H, int edad95_99M,
             int edad100MasH, int edad100MasM) {
@@ -27,6 +28,7 @@ public class CalidadCompHogPiramide {
         this.zona = zona;
         this.sector = sector;
         this.segmento = segmento;
+        this.censista = censista;
         this.edad70_74H = edad70_74H; this.edad70_74M = edad70_74M;
         this.edad75_79H = edad75_79H; this.edad75_79M = edad75_79M;
         this.edad80_84H = edad80_84H; this.edad80_84M = edad80_84M;
@@ -42,6 +44,7 @@ public class CalidadCompHogPiramide {
     public int getZona() { return zona; }
     public int getSector() { return sector; }
     public String getSegmento() { return segmento; }
+    public String getCensista() { return censista; }
     public int getEdad70_74H() { return edad70_74H; }
     public int getEdad70_74M() { return edad70_74M; }
     public int getEdad75_79H() { return edad75_79H; }

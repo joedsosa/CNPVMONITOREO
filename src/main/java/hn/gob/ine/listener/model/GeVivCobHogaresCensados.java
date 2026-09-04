@@ -4,15 +4,19 @@ public class GeVivCobHogaresCensados {
 
     private String depto;
     private String mun;
+    private int apoyoMunicipal;
+    private int zona;
     private String sector;
     private String segmento;
     private String censista;
     private int cantidadCensadas;
 
-    public GeVivCobHogaresCensados(String depto, String mun, String sector, String segmento,
+    public GeVivCobHogaresCensados(String depto, String mun, int apoyoMunicipal, int zona, String sector, String segmento,
                                    String censista, int cantidadCensadas) {
         this.depto = depto;
         this.mun = mun;
+        this.apoyoMunicipal = apoyoMunicipal;
+        this.zona = zona;
         this.sector = sector;
         this.segmento = segmento;
         this.censista = censista;
@@ -25,6 +29,14 @@ public class GeVivCobHogaresCensados {
 
     public String getMun() {
         return mun;
+    }
+
+    public int getApoyoMunicipal() {
+        return apoyoMunicipal;
+    }
+
+    public int getZona() {
+        return zona;
     }
 
     public String getSector() {
